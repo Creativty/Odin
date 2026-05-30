@@ -258,6 +258,7 @@ gb_internal OdinDocArray<T> odin_write_item_as_slice(OdinDocWriter *w, T data) {
 	return odin_write_slice(w, &data, 1);
 }
 
+gb_internal OdinDocString odin_doc_pkg_doc_string(OdinDocWriter *w, AstPackage *pkg);
 
 gb_internal OdinDocPosition odin_doc_token_pos_cast(OdinDocWriter *w, TokenPos const &pos) {
 	OdinDocFileIndex file_index = 0;
@@ -265,8 +266,47 @@ gb_internal OdinDocPosition odin_doc_token_pos_cast(OdinDocWriter *w, TokenPos c
 		AstFile *file = global_files[pos.file_id];
 		if (file != nullptr) {
 			OdinDocFileIndex *file_index_found = map_get(&w->file_cache, file);
-			GB_ASSERT(file_index_found != nullptr);
-			file_index = *file_index_found;
+			if (file_index_found != nullptr) {
+				file_index = *file_index_found;
+			} else {
+				AstPackage      *pkg = file->pkg;
+				if (map_get(&w->pkg_cache, pkg) == nullptr) {
+					u32 pkg_flags = 0;
+					switch (pkg->kind) {
+					case Package_Normal:
+						break;
+					case Package_Runtime:
+						pkg_flags |= OdinDocPkgFlag_Runtime;
+						break;
+					case Package_Init:
+						pkg_flags |= OdinDocPkgFlag_Init;
+						break;
+					case Package_Builtin:
+						pkg_flags |= OdinDocPkgFlag_Builtin;
+						break;
+					}
+
+					OdinDocPkg doc_pkg = {};
+					doc_pkg.fullpath = odin_doc_write_string(w, pkg->fullpath);
+					doc_pkg.name     = odin_doc_write_string(w, pkg->name);
+					doc_pkg.flags    = pkg_flags;
+					doc_pkg.docs     = odin_doc_pkg_doc_string(w, pkg);
+
+					OdinDocPkg *dst = nullptr;
+					OdinDocPkgIndex pkg_index = odin_doc_write_item(w, &w->pkgs, &doc_pkg, &dst);
+					map_set(&w->pkg_cache, pkg, pkg_index);
+				}
+
+				OdinDocPkgIndex pkg_index = *map_get(&w->pkg_cache, pkg);
+
+				OdinDocFile doc_file = {};
+				doc_file.pkg = pkg_index;
+				doc_file.name = odin_doc_write_string(w, file->fullpath);
+
+				file_index = odin_doc_write_item(w, &w->files, &doc_file);
+				map_set(&w->file_cache, file, file_index);
+			}
+			// GB_ASSERT(file_index_found != nullptr);
 		}
 	}
 

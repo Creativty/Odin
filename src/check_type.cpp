@@ -1786,29 +1786,24 @@ gb_internal ParameterValue handle_parameter_value(CheckerContext *ctx, Type *in_
 				param_value.value = exact_value_procedure(expr);
 			} else {
 				Entity *e = entity_from_expr(o.expr);
+				bool is_addressed = (expr->kind == Ast_UnaryExpr && expr->UnaryExpr.op.kind == Token_And);
 
 				if (e != nullptr) {
 					if (e->kind == Entity_Procedure) {
 						param_value.kind = ParameterValue_Constant;
 						param_value.value = exact_value_procedure(e->identifier);
 						add_entity_use(ctx, e->identifier, e);
+					} else if (e->flags & EntityFlag_Param || is_expr_from_a_parameter(ctx, expr)) {
+						error(expr, "Default parameter cannot be another parameter");
 					} else {
-						if (e->flags & EntityFlag_Param) {
-							error(expr, "Default parameter cannot be another parameter");
-						} else {
-							if (is_expr_from_a_parameter(ctx, expr)) {
-								error(expr, "Default parameter cannot be another parameter");
-							} else {
-								param_value.kind = ParameterValue_Value;
-								param_value.ast_value = expr;
-								add_entity_use(ctx, e->identifier, e);
-							}
-						}
+						param_value.kind = ParameterValue_Value;
+						param_value.ast_value = expr;
+						add_entity_use(ctx, e->identifier, e);
 					}
 				} else if (allow_caller_location && o.mode == Addressing_Context) {
 					param_value.kind = ParameterValue_Value;
 					param_value.ast_value = expr;
-				} else if (o.value.kind != ExactValue_Invalid) {
+				} else if (o.value.kind != ExactValue_Invalid && !is_addressed) {
 					param_value.kind = ParameterValue_Constant;
 					param_value.value = o.value;
 				} else {
